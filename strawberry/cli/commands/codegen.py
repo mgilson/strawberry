@@ -9,6 +9,8 @@ import click
 
 from strawberry.cli.utils import load_schema
 from strawberry.codegen import QueryCodegen, QueryCodegenPlugin
+from strawberry.codegen.plugins.python import PythonPlugin
+from strawberry.codegen.plugins.typescript import TypeScriptPlugin
 
 if TYPE_CHECKING:
     from strawberry.codegen import CodegenResult
@@ -81,12 +83,10 @@ def _load_plugins(plugins: List[str]) -> List[Type[QueryCodegenPlugin]]:
 
 class ConsolePlugin(QueryCodegenPlugin):
 
-    allows_multiple = True
-
     def __init__(
         self, query: Path, output_dir: Path, plugins: List[QueryCodegenPlugin]
     ):
-        super().__init__(query)
+        self.query = query
         self.output_dir = output_dir
         self.plugins = plugins
 
@@ -158,13 +158,23 @@ def codegen(
 
     plugin_types = _load_plugins(selected_plugins)
 
-    if len(query) > 1 and not all(p.allows_multiple for p in plugin_types):
-        raise click.BadArgumentUsage(
-            "Some of the selected plugins do not allow working with multiple query files."
-        )
-
     for q in query:
-        plugins = [plugin_type(q) for plugin_type in plugin_types]
+        plugins = [plugin_type() for plugin_type in plugin_types]
+        # Set the `query` parameter on the plugins.
+        # This happens after `__init__` to maintain backward compatibility with
+        # existing consumer plugins that may have custom logic in `__init__`
+        # already.  In principle, we may change the signature of the plugins
+        # in some future MAJOR release.
+        for p in plugins:
+            p.query = q
+            # Adjust the names of the output files for the buildin plugins if there are multiple
+            # files being generated.
+            if len(query) > 1:
+                if isinstance(p, PythonPlugin):
+                    p.outfile_name = q.stem + ".py"
+                elif isinstance(p, TypeScriptPlugin):
+                    p.outfile_name = q.stem + ".js"
+
         console_plugin = console_plugin_type(q, output_dir, plugins)
         plugins.append(console_plugin)
 

@@ -116,14 +116,9 @@ class HasSelectionSet(Protocol):
 
 class QueryCodegenPlugin:
 
-    #: Whether this plugin can operate on multiple query files
-    allows_multiple: ClassVar[bool] = False
-
     #: That path that holds the query being processed.
+    #: This gets set immediately after __init__
     query: Path
-
-    def __init__(self, query: Path) -> None:
-        self.query = query
 
     def on_start(self) -> None:
         ...

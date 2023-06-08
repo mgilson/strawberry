@@ -25,6 +25,8 @@ class PythonType:
     module: Optional[str] = None
 
 
+DEFAULT_OUTFILE_NAME = "types.py"
+
 class PythonPlugin(QueryCodegenPlugin):
     SCALARS_TO_PYTHON_TYPES = {
         "ID": PythonType("str"),
@@ -39,6 +41,8 @@ class PythonPlugin(QueryCodegenPlugin):
         "Decimal": PythonType("Decimal", "decimal"),
     }
 
+    outfile_name: str = DEFAULT_OUTFILE_NAME
+
     def __init__(self) -> None:
         self.imports: Dict[str, Set[str]] = defaultdict(set)
 
@@ -50,7 +54,7 @@ class PythonPlugin(QueryCodegenPlugin):
 
         code = imports + "\n\n" + "\n\n".join(printed_types)
 
-        return [CodegenFile("types.py", code.strip())]
+        return [CodegenFile(self.outfile_name, code.strip())]
 
     def _print_imports(self) -> str:
         imports = [
