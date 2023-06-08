@@ -5,6 +5,7 @@ from functools import partial
 from typing import (
     TYPE_CHECKING,
     Callable,
+    ClassVar,
     Iterable,
     List,
     Optional,
@@ -114,6 +115,16 @@ class HasSelectionSet(Protocol):
 
 
 class QueryCodegenPlugin:
+
+    #: Whether this plugin can operate on multiple query files
+    allows_multiple: ClassVar[bool] = False
+
+    #: That path that holds the query being processed.
+    query: Path
+
+    def __init__(self, query: Path) -> None:
+        self.query = query
+
     def on_start(self) -> None:
         ...
 

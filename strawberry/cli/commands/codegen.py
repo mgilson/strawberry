@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import inspect
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Type
+from typing import TYPE_CHECKING, List, Optional, Tuple, Type
 
 import click
 
@@ -75,15 +75,18 @@ def _load_plugin(plugin_path: str) -> Type[QueryCodegenPlugin]:
     return plugin
 
 
-def _load_plugins(plugins: List[str]) -> List[QueryCodegenPlugin]:
-    return [_load_plugin(plugin)() for plugin in plugins]
+def _load_plugins(plugins: List[str]) -> List[Type[QueryCodegenPlugin]]:
+    return [_load_plugin(plugin) for plugin in plugins]
 
 
 class ConsolePlugin(QueryCodegenPlugin):
+
+    allows_multiple = True
+
     def __init__(
         self, query: Path, output_dir: Path, plugins: List[QueryCodegenPlugin]
     ):
-        self.query = query
+        super().__init__(query)
         self.output_dir = output_dir
         self.plugins = plugins
 
@@ -129,7 +132,7 @@ class ConsolePlugin(QueryCodegenPlugin):
     type=click.Path(path_type=Path, exists=False, dir_okay=True, file_okay=False),
 )
 @click.option("--schema", type=str, required=True)
-@click.argument("query", type=click.Path(path_type=Path, exists=True))
+@click.argument("query", type=click.Path(path_type=Path, exists=True), nargs=-1)
 @click.option(
     "--app-dir",
     default=".",
@@ -143,7 +146,7 @@ class ConsolePlugin(QueryCodegenPlugin):
 )
 def codegen(
     schema: str,
-    query: Path,
+    query: Tuple[Path, ...],
     app_dir: str,
     output_dir: Path,
     selected_plugins: List[str],
@@ -151,10 +154,19 @@ def codegen(
 ) -> None:
     schema_symbol = load_schema(schema, app_dir)
 
-    console_plugin = _load_plugin(cli_plugin) if cli_plugin else ConsolePlugin
+    console_plugin_type = _load_plugin(cli_plugin) if cli_plugin else ConsolePlugin
 
-    plugins = _load_plugins(selected_plugins)
-    plugins.append(console_plugin(query, output_dir, plugins))
+    plugin_types = _load_plugins(selected_plugins)
 
-    code_generator = QueryCodegen(schema_symbol, plugins=plugins)
-    code_generator.run(query.read_text())
+    if len(query) > 1 and not all(p.allows_multiple for p in plugin_types):
+        raise click.BadArgumentUsage(
+            "Some of the selected plugins do not allow working with multiple query files."
+        )
+
+    for q in query:
+        plugins = [plugin_type(q) for plugin_type in plugin_types]
+        console_plugin = console_plugin_type(q, output_dir, plugins)
+        plugins.append(console_plugin)
+
+        code_generator = QueryCodegen(schema_symbol, plugins=plugins)
+        code_generator.run(q.read_text())
